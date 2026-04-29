@@ -37,10 +37,12 @@ UNKNOWN_BUG_NEEDLE = "internet led not glowing"
 
 
 def classify(led, ping):
-    # If device is currently pinging, the visit is attributed to CSP regardless of LED status.
+    # ping=Yes → CSP, regardless of LED status (overrides everything below).
     if (ping or "").strip().lower() == "yes":
         return "csp"
     s = led.strip().lower()
+    # All ON / Only Power Led glowing = Wiom-side issue, NOT reported in CSP or Unknown Bug
+    # columns. Visit is still counted in # Visits and TTD.
     if s in NORMAL_LED:
         return "normal"
     if UNKNOWN_BUG_NEEDLE in s:
