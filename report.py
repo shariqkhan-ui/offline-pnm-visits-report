@@ -378,16 +378,14 @@ def post_message(token, channel_id, text, image_url=None):
 
 def post_with_blocks(token, channel_id, image_url, cc_user_ids, mode="yesterday"):
     """cc_user_ids: list of Slack user IDs to mention in the cc line. Empty list = no cc."""
-    cc_indent = " " * 80
     if mode == "today":
         headline = '<!channel>- Please find the report of "Suprise physical visit at CSP" as of now.'
     else:
         headline = '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.'
     if cc_user_ids:
         cc_text = " ".join(f"<@{uid}>" for uid in cc_user_ids)
-        # Same section as headline so cc renders at the same font size as the commentary,
-        # pushed right with leading spaces (Slack preserves them in mrkdwn).
-        full_text = f"{headline}\n{cc_indent}cc {cc_text}"
+        # cc on a new line, left-aligned with the headline above (no indent), same font size.
+        full_text = f"{headline}\ncc {cc_text}"
     else:
         full_text = headline
     blocks = [
