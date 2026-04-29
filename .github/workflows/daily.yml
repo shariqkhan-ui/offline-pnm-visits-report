@@ -1,0 +1,44 @@
+name: Daily PNM visits report
+
+on:
+  schedule:
+    # 04:30 UTC = 10:00 AM IST
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Chrome
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq google-chrome-stable || \
+            (wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+             sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb)
+          google-chrome --version
+
+      - name: Run report
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          HARMEET_USER_ID: ${{ secrets.HARMEET_USER_ID }}
+          WHATSAPPER_USER_ID: ${{ secrets.WHATSAPPER_USER_ID }}
+          CHROME_PATH: /usr/bin/google-chrome
+        run: python report.py
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-png
+          path: |
+            report.png
+            report.html
+          if-no-files-found: ignore
