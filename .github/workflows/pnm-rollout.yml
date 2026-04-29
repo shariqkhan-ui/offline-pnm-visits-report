@@ -1,12 +1,12 @@
-name: Daily PNM visits report
+name: PNM device rollout — daily report
 
 on:
   schedule:
-    # IST is UTC+5:30. Primary at 10:00 AM IST, three backup attempts every 30 min.
-    - cron: '30 4 * * *'   # 10:00 AM IST (primary)
-    - cron: '0 5 * * *'    # 10:30 AM IST (backup 1)
-    - cron: '30 5 * * *'   # 11:00 AM IST (backup 2)
-    - cron: '0 6 * * *'    # 11:30 AM IST (backup 3)
+    # 10:00 AM IST primary + 30-min backups (idempotent via .posted-pnm marker)
+    - cron: '30 4 * * *'   # 10:00 AM IST
+    - cron: '0 5 * * *'    # 10:30 AM IST
+    - cron: '30 5 * * *'   # 11:00 AM IST
+    - cron: '0 6 * * *'    # 11:30 AM IST
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,8 @@ permissions:
 jobs:
   post:
     runs-on: ubuntu-latest
+    env:
+      MARKER_KEY: pnm
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,21 +26,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Compute report-day path
+      - name: Compute report-day + marker
         id: paths
         run: |
           DAY=$(TZ=Asia/Kolkata date -d 'yesterday' +%Y-%m-%d)
           echo "day=$DAY" >> $GITHUB_OUTPUT
+          echo "marker=reports/$DAY.posted-${MARKER_KEY}" >> $GITHUB_OUTPUT
 
-      - name: Skip if today's report already posted
+      - name: Skip if already posted
         id: check
         run: |
-          MARKER="reports/${{ steps.paths.outputs.day }}.posted"
-          if [ -f "$MARKER" ]; then
-            echo "Marker $MARKER exists -> skipping (already posted)"
+          if [ -f "${{ steps.paths.outputs.marker }}" ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
           else
-            echo "No marker for ${{ steps.paths.outputs.day }} -> proceeding"
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
@@ -49,23 +49,19 @@ jobs:
           sudo apt-get install -y -qq google-chrome-stable || \
             (wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
              sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb)
-          google-chrome --version
 
-      - name: Render report image
+      - name: Render report image (yesterday-anchored)
         if: steps.check.outputs.skip != 'true'
         env:
           CHROME_PATH: /usr/bin/google-chrome
         run: |
           python -c "
-          import os, sys
-          sys.path.insert(0, '.')
+          import sys; sys.path.insert(0, '.')
           from datetime import datetime, timedelta, timezone
           from report import compute, render_html, screenshot, HTML_PATH, PNG_PATH
-          now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
-          today = now_ist.date()
-          daily, ttd, yesterday, d2, d3 = compute(today)
-          html = render_html(daily, ttd, yesterday, d2, d3)
-          open(HTML_PATH, 'w', encoding='utf-8').write(html)
+          now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+          d, t, y, d2, d3 = compute(now.date(), include_today=False)
+          open(HTML_PATH, 'w', encoding='utf-8').write(render_html(d, t, y, d2, d3))
           screenshot(HTML_PATH, PNG_PATH)
           "
 
@@ -78,39 +74,30 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git add reports/
-          git commit -m "report: ${{ steps.paths.outputs.day }} (image)" || echo "no changes"
+          git commit -m "report: ${{ steps.paths.outputs.day }} (image, ${MARKER_KEY})" || echo "no changes"
           git pull --rebase || true
           git push
 
-      - name: Post to Slack
+      - name: Post to PNM device rollout channel (with cc)
         if: steps.check.outputs.skip != 'true'
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL_IDS: ${{ secrets.SLACK_CHANNEL_IDS }}
+          SLACK_CHANNEL_IDS: C0ANNECCPV4
+          MODE: yesterday
+          INCLUDE_CC: 'true'
           HARMEET_USER_ID: ${{ secrets.HARMEET_USER_ID }}
           WHATSAPPER_USER_ID: ${{ secrets.WHATSAPPER_USER_ID }}
-          CHROME_PATH: /usr/bin/google-chrome
           IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/reports/${{ steps.paths.outputs.day }}.png
         run: python report.py
 
-      - name: Commit posted marker (idempotency guard)
+      - name: Commit posted marker
         if: steps.check.outputs.skip != 'true' && success()
         run: |
           echo "Posted at $(date -u --iso-8601=seconds) by ${{ github.run_id }}" \
-            > "reports/${{ steps.paths.outputs.day }}.posted"
+            > "${{ steps.paths.outputs.marker }}"
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
-          git add "reports/${{ steps.paths.outputs.day }}.posted"
-          git commit -m "report: ${{ steps.paths.outputs.day }} (posted marker)"
+          git add "${{ steps.paths.outputs.marker }}"
+          git commit -m "report: ${{ steps.paths.outputs.day }} (marker, ${MARKER_KEY})"
           git pull --rebase || true
           git push
-
-      - name: Upload artifact
-        if: always() && steps.check.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: report-png
-          path: |
-            report.png
-            report.html
-          if-no-files-found: ignore

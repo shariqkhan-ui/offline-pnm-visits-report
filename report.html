@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><style>
+  body { margin:0; padding:32px; background:#f5f6f8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#1d1c1d; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); padding:24px; max-width:1140px; }
+  h1 { margin:0 0 4px; font-size:18px; color:#1d1c1d; }
+  .sub { color:#616061; font-size:13px; margin-bottom:18px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th { background:#E5178F; color:#fff; text-align:center; padding:10px 12px; font-weight:600; }
+  th:first-child { text-align:left; border-top-left-radius:8px; }
+  th:last-child { border-top-right-radius:8px; }
+  td { padding:10px 12px; text-align:center; border-bottom:1px solid #e8e8e8; }
+  td.name { text-align:left; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  tr:nth-child(even) td { background:#fafbfc; }
+  tr.total td { background:#fdf0f7 !important; font-weight:700; border-top:2px solid #E5178F; }
+  .muted { color:#888; font-weight:400; }
+  .day { font-size:11px; color:#cfd2d8; font-weight:400; display:block; margin-top:2px; }
+  .note { margin-top:14px; font-size:12px; color:#616061; font-style:italic; line-height:1.5; }
+</style></head>
+<body>
+  <div class='card'>
+    <h1>Surprise physical visit at CSP &mdash; Today's Report</h1>
+    <div class='sub'>29 Apr 2026 &middot; as of 8:00 PM IST</div>
+    <table>
+      <thead><tr>
+        <th>Name</th>
+        <th># Visits</th>
+        <th>CSP Issue</th>
+        <th>Unknown Bug<span class='day'>Net led is not glowing</span></th>
+        <th>D-1<span class='day'>28 Apr</span></th>
+        <th>D-2<span class='day'>27 Apr</span></th>
+        <th>D-3<span class='day'>26 Apr</span></th>
+        <th>TTD</th>
+      </tr></thead>
+      <tbody>
+<tr><td class='name'>Fahad</td><td>9</td><td>8 <span class='muted'>(89%)</span></td><td>1 <span class='muted'>(11%)</span></td><td>6</td><td>0</td><td>0</td><td>15 <span class='muted'>(67%)</span></td></tr>
+<tr><td class='name'>Ajinkya</td><td>6</td><td>6 <span class='muted'>(100%)</span></td><td>0 <span class='muted'>(0%)</span></td><td>0</td><td>0</td><td>0</td><td>6 <span class='muted'>(100%)</span></td></tr>
+<tr><td class='name'>Anurag</td><td>7</td><td>4 <span class='muted'>(57%)</span></td><td>1 <span class='muted'>(14%)</span></td><td>0</td><td>0</td><td>0</td><td>7 <span class='muted'>(57%)</span></td></tr>
+<tr><td class='name'>Gaurav</td><td>0</td><td>0 <span class='muted'>(-)</span></td><td>0 <span class='muted'>(-)</span></td><td>0</td><td>0</td><td>0</td><td>0 <span class='muted'>(-)</span></td></tr>
+<tr class='total'><td class='name'>Total</td><td>22</td><td>18 <span class='muted'>(82%)</span></td><td>2 <span class='muted'>(9%)</span></td><td>6</td><td>0</td><td>0</td><td>28 <span class='muted'>(71%)</span></td></tr>
+      </tbody>
+    </table>
+    <div class='note'>Note: Unknown Bug is the issue where CSP and Wiom both are attributable till the final RCA and fix &mdash; hence not attributed to anyone.</div>
+  </div>
+</body></html>

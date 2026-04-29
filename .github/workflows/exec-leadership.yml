@@ -1,0 +1,117 @@
+name: Execution Leadership — thrice-daily report
+
+on:
+  schedule:
+    # 10:00 AM IST + 30-min backups
+    - cron: '30 4 * * *'
+    - cron: '0 5 * * *'
+    - cron: '30 5 * * *'
+    # 3:00 PM IST + 30-min backups
+    - cron: '30 9 * * *'
+    - cron: '0 10 * * *'
+    - cron: '30 10 * * *'
+    # 8:00 PM IST + 30-min backups
+    - cron: '30 14 * * *'
+    - cron: '0 15 * * *'
+    - cron: '30 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine slot + paths
+        id: paths
+        run: |
+          # Marker uses POST DAY (today in IST, when cron fires); image filename uses
+          # POST DAY too since each post snapshots data through that moment.
+          DAY=$(TZ=Asia/Kolkata date +%Y-%m-%d)
+          HOUR=$(TZ=Asia/Kolkata date +%H)
+          if   [ "$HOUR" -lt 13 ]; then SLOT="10am"
+          elif [ "$HOUR" -lt 18 ]; then SLOT="3pm"
+          else                          SLOT="8pm"
+          fi
+          echo "day=$DAY"   >> $GITHUB_OUTPUT
+          echo "slot=$SLOT" >> $GITHUB_OUTPUT
+          echo "marker=reports/$DAY.posted-exec-$SLOT" >> $GITHUB_OUTPUT
+          echo "image=reports/$DAY-exec-$SLOT.png"     >> $GITHUB_OUTPUT
+
+      - name: Skip if this slot already posted today
+        id: check
+        run: |
+          if [ -f "${{ steps.paths.outputs.marker }}" ]; then
+            echo "Marker exists -> skipping (${{ steps.paths.outputs.slot }} already posted)"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Chrome
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq google-chrome-stable || \
+            (wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+             sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb)
+
+      - name: Render report image (today-anchored)
+        if: steps.check.outputs.skip != 'true'
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from datetime import datetime, timedelta, timezone
+          from report import compute, render_html_today, screenshot, HTML_PATH, PNG_PATH
+          now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+          d, t, y, d2, d3 = compute(now.date(), include_today=True)
+          html = render_html_today(d, t, now.date(), y, d2, d3, now)
+          open(HTML_PATH, 'w', encoding='utf-8').write(html)
+          screenshot(HTML_PATH, PNG_PATH)
+          "
+
+      - name: Commit PNG so raw URL is live
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          mkdir -p reports
+          cp report.png "${{ steps.paths.outputs.image }}"
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add reports/
+          git commit -m "report: ${{ steps.paths.outputs.day }} (exec ${{ steps.paths.outputs.slot }})" || echo "no changes"
+          git pull --rebase || true
+          git push
+
+      - name: Post to Execution Leadership channel (cc Harmeet only, today-anchored)
+        if: steps.check.outputs.skip != 'true'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_IDS: C093GJDKMKP
+          MODE: today
+          INCLUDE_CC: 'true'
+          CC_USER_IDS: ${{ secrets.HARMEET_USER_ID }}
+          IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/${{ steps.paths.outputs.image }}
+        run: python report.py
+
+      - name: Commit posted marker
+        if: steps.check.outputs.skip != 'true' && success()
+        run: |
+          echo "Posted at $(date -u --iso-8601=seconds) by ${{ github.run_id }} (slot=${{ steps.paths.outputs.slot }})" \
+            > "${{ steps.paths.outputs.marker }}"
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add "${{ steps.paths.outputs.marker }}"
+          git commit -m "report: ${{ steps.paths.outputs.day }} (marker, exec ${{ steps.paths.outputs.slot }})"
+          git pull --rebase || true
+          git push
