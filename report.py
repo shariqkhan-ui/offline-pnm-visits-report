@@ -383,22 +383,19 @@ def post_with_blocks(token, channel_id, image_url, cc_user_ids, mode="yesterday"
         headline = '<!channel>- Please find the report of "Suprise physical visit at CSP" as of now.'
     else:
         headline = '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.'
+    if cc_user_ids:
+        cc_text = " ".join(f"<@{uid}>" for uid in cc_user_ids)
+        # Same section as headline so cc renders at the same font size as the commentary,
+        # pushed right with leading spaces (Slack preserves them in mrkdwn).
+        full_text = f"{headline}\n{cc_indent}cc {cc_text}"
+    else:
+        full_text = headline
     blocks = [
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": headline},
+            "text": {"type": "mrkdwn", "text": full_text},
         },
     ]
-    if cc_user_ids:
-        cc_text = " ".join(f"<@{uid}>" for uid in cc_user_ids)
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {"type": "mrkdwn", "text": f"{cc_indent}cc {cc_text}"}
-                ],
-            }
-        )
     payload = {
         "channel": channel_id,
         "text": "Daily PNM Visit Report",
