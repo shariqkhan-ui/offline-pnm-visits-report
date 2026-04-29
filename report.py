@@ -5,10 +5,11 @@ screenshots it via headless Chrome, and posts the PNG + commentary to Slack.
 Runs in GitHub Actions on a daily cron at 04:30 UTC (10:00 AM IST).
 
 Required env vars:
-- SLACK_BOT_TOKEN   xoxb- token with chat:write and files:write scopes
-- SLACK_CHANNEL_ID  Target channel ID (Cxxxxx)
-- HARMEET_USER_ID   (optional) User ID to cc — defaults to U077923R68H
-- WHATSAPPER_USER_ID (optional) User ID to cc — defaults to U040Y7SEUSU
+- SLACK_BOT_TOKEN     xoxb-/xoxp- token with chat:write
+- SLACK_CHANNEL_IDS   Comma-separated target channel IDs (Cxxx,Cxxx)
+- IMAGE_URL           Public URL of the report PNG (used as Slack attachment image)
+- HARMEET_USER_ID     (optional) User ID to cc — defaults to U077923R68H
+- WHATSAPPER_USER_ID  (optional) User ID to cc — defaults to U040Y7SEUSU
 """
 import csv
 import io
@@ -99,11 +100,19 @@ def ttd_cell(t):
 
 def render_html(daily, ttd, yesterday, d2, d3):
     rows_html = []
+    tot_y = {"v": 0, "c": 0, "u": 0}
+    tot_d2 = 0
+    tot_d3 = 0
+    tot_ttd = {"v": 0, "c": 0, "u": 0}
     for name in DISPLAY_ORDER:
         y = daily[name][yesterday]
         d2v = daily[name][d2]["v"]
         d3v = daily[name][d3]["v"]
         t = ttd[name]
+        tot_y["v"] += y["v"]; tot_y["c"] += y["c"]; tot_y["u"] += y["u"]
+        tot_d2 += d2v
+        tot_d3 += d3v
+        tot_ttd["v"] += t["v"]; tot_ttd["c"] += t["c"]; tot_ttd["u"] += t["u"]
         rows_html.append(
             f"<tr>"
             f"<td class='name'>{name}</td>"
@@ -116,6 +125,18 @@ def render_html(daily, ttd, yesterday, d2, d3):
             f"<td>{ttd_cell(t)}</td>"
             f"</tr>"
         )
+    rows_html.append(
+        f"<tr class='total'>"
+        f"<td class='name'>Total</td>"
+        f"<td>{tot_y['v']}</td>"
+        f"<td>{pct(tot_y['v'], tot_y['c'])}</td>"
+        f"<td>{pct(tot_y['v'], tot_y['u'])}</td>"
+        f"<td>{tot_y['v']}</td>"
+        f"<td>{tot_d2}</td>"
+        f"<td>{tot_d3}</td>"
+        f"<td>{ttd_cell(tot_ttd)}</td>"
+        f"</tr>"
+    )
     body_rows = "\n".join(rows_html)
     title_date = yesterday.strftime("%d %b %Y")
     d1_label = yesterday.strftime("%d %b")
@@ -135,6 +156,7 @@ def render_html(daily, ttd, yesterday, d2, d3):
   td.name {{ text-align:left; font-weight:600; }}
   tr:last-child td {{ border-bottom:none; }}
   tr:nth-child(even) td {{ background:#fafbfc; }}
+  tr.total td {{ background:#fdf0f7 !important; font-weight:700; border-top:2px solid #E5178F; }}
   .muted {{ color:#888; font-weight:400; }}
   .day {{ font-size:11px; color:#cfd2d8; font-weight:400; display:block; margin-top:2px; }}
   .note {{ margin-top:14px; font-size:12px; color:#616061; font-style:italic; line-height:1.5; }}
@@ -194,7 +216,7 @@ def screenshot(html_path, png_path):
         "--no-sandbox",
         "--hide-scrollbars",
         "--default-background-color=00000000",
-        "--window-size=1080,560",
+        "--window-size=1080,610",
         f"--screenshot={png_path}",
         f"file://{html_path}" if os.sep == "/" else f"file:///{html_path.replace(os.sep, '/')}",
     ]
@@ -228,26 +250,84 @@ def slack_api_json(method, token, payload):
         return json.loads(resp.read())
 
 
-def post_message(token, channel_id, text):
-    r = slack_api_json(
-        "chat.postMessage",
-        token,
-        {"channel": channel_id, "text": text, "unfurl_links": True, "unfurl_media": True},
-    )
+def post_message(token, channel_id, text, image_url=None):
+    payload = {
+        "channel": channel_id,
+        "text": text,
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+    if image_url:
+        payload["attachments"] = [
+            {
+                "fallback": "Daily PNM Visit Report",
+                "image_url": image_url,
+                "color": "#E5178F",
+                "footer": (
+                    "Note: Unknown Bug is the issue where CSP and Wiom both are "
+                    "attributable till the final RCA and fix - hence not attributed to anyone."
+                ),
+            }
+        ]
+    r = slack_api_json("chat.postMessage", token, payload)
     if not r.get("ok"):
-        raise RuntimeError(f"chat.postMessage failed: {r}")
+        raise RuntimeError(f"chat.postMessage to {channel_id} failed: {r}")
+    return r
+
+
+def post_with_blocks(token, channel_id, image_url, harmeet, whats):
+    cc_indent = " " * 80
+    payload = {
+        "channel": channel_id,
+        "text": "Daily PNM Visit Report",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.',
+                },
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"{cc_indent}cc <@{harmeet}> <@{whats}>"}
+                ],
+            },
+        ],
+        "attachments": [
+            {
+                "fallback": "Daily PNM Visit Report",
+                "image_url": image_url,
+                "color": "#E5178F",
+                "footer": (
+                    "Note: Unknown Bug is the issue where CSP and Wiom both are "
+                    "attributable till the final RCA and fix - hence not attributed to anyone."
+                ),
+            }
+        ],
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+    r = slack_api_json("chat.postMessage", token, payload)
+    if not r.get("ok"):
+        raise RuntimeError(f"chat.postMessage to {channel_id} failed: {r}")
     return r
 
 
 def main():
     token = os.environ.get("SLACK_BOT_TOKEN")
-    channel = os.environ.get("SLACK_CHANNEL_ID")
-    if not token or not channel:
-        print("ERROR: SLACK_BOT_TOKEN and SLACK_CHANNEL_ID env vars required", file=sys.stderr)
+    channels_raw = os.environ.get("SLACK_CHANNEL_IDS") or os.environ.get("SLACK_CHANNEL_ID", "")
+    channels = [c.strip() for c in channels_raw.split(",") if c.strip()]
+    if not token or not channels:
+        print("ERROR: SLACK_BOT_TOKEN and SLACK_CHANNEL_IDS env vars required", file=sys.stderr)
         sys.exit(1)
     harmeet = os.environ.get("HARMEET_USER_ID", "U077923R68H")
     whats = os.environ.get("WHATSAPPER_USER_ID", "U040Y7SEUSU")
     image_url = os.environ.get("IMAGE_URL", "")
+    if not image_url:
+        print("ERROR: IMAGE_URL env var required (URL of the report PNG)", file=sys.stderr)
+        sys.exit(1)
 
     now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     today = now_ist.date()
@@ -257,19 +337,9 @@ def main():
         f.write(html)
     screenshot(HTML_PATH, PNG_PATH)
 
-    text_parts = [
-        '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.',
-        f"cc <@{harmeet}> <@{whats}>",
-    ]
-    if image_url:
-        text_parts.append("")
-        text_parts.append(image_url)
-    text_parts.append("")
-    text_parts.append(
-        "_Note: Unknown Bug is the issue where CSP and Wiom both are attributable till the final RCA and fix — hence not attributed to anyone._"
-    )
-    post_message(token, channel, "\n".join(text_parts))
-    print(f"Posted report to channel {channel}")
+    for ch in channels:
+        post_with_blocks(token, ch, image_url, harmeet, whats)
+        print(f"Posted to {ch}")
 
 
 if __name__ == "__main__":

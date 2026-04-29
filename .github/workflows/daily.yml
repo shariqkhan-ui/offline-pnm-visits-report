@@ -65,7 +65,7 @@ jobs:
       - name: Post to Slack with image URL
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_CHANNEL_IDS: ${{ secrets.SLACK_CHANNEL_IDS }}
           HARMEET_USER_ID: ${{ secrets.HARMEET_USER_ID }}
           WHATSAPPER_USER_ID: ${{ secrets.WHATSAPPER_USER_ID }}
           CHROME_PATH: /usr/bin/google-chrome
