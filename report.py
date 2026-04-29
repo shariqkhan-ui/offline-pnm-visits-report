@@ -228,33 +228,15 @@ def slack_api_json(method, token, payload):
         return json.loads(resp.read())
 
 
-def upload_to_slack(token, channel_id, png_path, comment):
-    size = os.path.getsize(png_path)
-    r1 = slack_api("files.getUploadURLExternal", token, filename="pnm_report.png", length=str(size))
-    if not r1.get("ok"):
-        raise RuntimeError(f"getUploadURL failed: {r1}")
-    upload_url = r1["upload_url"]
-    file_id = r1["file_id"]
-
-    with open(png_path, "rb") as f:
-        body = f.read()
-    req = urllib.request.Request(upload_url, data=body, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        if resp.status not in (200, 201):
-            raise RuntimeError(f"upload failed status {resp.status}")
-
-    r3 = slack_api_json(
-        "files.completeUploadExternal",
+def post_message(token, channel_id, text):
+    r = slack_api_json(
+        "chat.postMessage",
         token,
-        {
-            "files": [{"id": file_id, "title": "Surprise physical visit at CSP - Daily Report"}],
-            "channel_id": channel_id,
-            "initial_comment": comment,
-        },
+        {"channel": channel_id, "text": text, "unfurl_links": True, "unfurl_media": True},
     )
-    if not r3.get("ok"):
-        raise RuntimeError(f"completeUpload failed: {r3}")
-    return r3
+    if not r.get("ok"):
+        raise RuntimeError(f"chat.postMessage failed: {r}")
+    return r
 
 
 def main():
@@ -265,6 +247,7 @@ def main():
         sys.exit(1)
     harmeet = os.environ.get("HARMEET_USER_ID", "U077923R68H")
     whats = os.environ.get("WHATSAPPER_USER_ID", "U040Y7SEUSU")
+    image_url = os.environ.get("IMAGE_URL", "")
 
     now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     today = now_ist.date()
@@ -274,11 +257,18 @@ def main():
         f.write(html)
     screenshot(HTML_PATH, PNG_PATH)
 
-    comment = (
-        f"<!channel>- Please find the report of \"Surprise physical visit at CSP\" as of yesterday.\n"
-        f"cc <@{harmeet}> <@{whats}>"
+    text_parts = [
+        '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.',
+        f"cc <@{harmeet}> <@{whats}>",
+    ]
+    if image_url:
+        text_parts.append("")
+        text_parts.append(image_url)
+    text_parts.append("")
+    text_parts.append(
+        "_Note: Unknown Bug is the issue where CSP and Wiom both are attributable till the final RCA and fix — hence not attributed to anyone._"
     )
-    upload_to_slack(token, channel, PNG_PATH, comment)
+    post_message(token, channel, "\n".join(text_parts))
     print(f"Posted report to channel {channel}")
 
 

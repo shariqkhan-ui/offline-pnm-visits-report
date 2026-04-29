@@ -6,6 +6,9 @@ on:
     - cron: '30 4 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   post:
     runs-on: ubuntu-latest
@@ -24,13 +27,49 @@ jobs:
              sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb)
           google-chrome --version
 
-      - name: Run report
+      - name: Compute report-day path
+        id: paths
+        run: |
+          DAY=$(TZ=Asia/Kolkata date -d 'yesterday' +%Y-%m-%d)
+          echo "day=$DAY" >> $GITHUB_OUTPUT
+          echo "repo=${{ github.repository }}" >> $GITHUB_OUTPUT
+
+      - name: Render report image (without posting yet)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          python -c "
+          import os, sys
+          sys.path.insert(0, '.')
+          from datetime import datetime, timedelta, timezone
+          from report import compute, render_html, screenshot, HTML_PATH, PNG_PATH
+          now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+          today = now_ist.date()
+          daily, ttd, yesterday, d2, d3 = compute(today)
+          html = render_html(daily, ttd, yesterday, d2, d3)
+          open(HTML_PATH, 'w', encoding='utf-8').write(html)
+          screenshot(HTML_PATH, PNG_PATH)
+          "
+
+      - name: Commit report.png to reports/<day>.png
+        run: |
+          mkdir -p reports
+          cp report.png "reports/${{ steps.paths.outputs.day }}.png"
+          cp report.png reports/latest.png
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add reports/
+          git commit -m "report: ${{ steps.paths.outputs.day }}" || echo "no changes"
+          git push
+
+      - name: Post to Slack with image URL
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           HARMEET_USER_ID: ${{ secrets.HARMEET_USER_ID }}
           WHATSAPPER_USER_ID: ${{ secrets.WHATSAPPER_USER_ID }}
           CHROME_PATH: /usr/bin/google-chrome
+          IMAGE_URL: https://raw.githubusercontent.com/${{ steps.paths.outputs.repo }}/main/reports/${{ steps.paths.outputs.day }}.png
         run: python report.py
 
       - name: Upload artifact
