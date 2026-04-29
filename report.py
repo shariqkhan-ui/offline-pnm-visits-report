@@ -408,10 +408,6 @@ def post_with_blocks(token, channel_id, image_url, cc_user_ids, mode="yesterday"
                 "fallback": "Daily PNM Visit Report",
                 "image_url": image_url,
                 "color": "#E5178F",
-                "footer": (
-                    "Note: Unknown Bug is the issue where CSP and Wiom both are "
-                    "attributable till the final RCA and fix - hence not attributed to anyone."
-                ),
             }
         ],
         "unfurl_links": False,
