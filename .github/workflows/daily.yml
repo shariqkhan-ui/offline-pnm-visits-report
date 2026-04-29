@@ -2,8 +2,11 @@ name: Daily PNM visits report
 
 on:
   schedule:
-    # 04:30 UTC = 10:00 AM IST
-    - cron: '30 4 * * *'
+    # IST is UTC+5:30. Primary at 10:00 AM IST, three backup attempts every 30 min.
+    - cron: '30 4 * * *'   # 10:00 AM IST (primary)
+    - cron: '0 5 * * *'    # 10:30 AM IST (backup 1)
+    - cron: '30 5 * * *'   # 11:00 AM IST (backup 2)
+    - cron: '0 6 * * *'    # 11:30 AM IST (backup 3)
   workflow_dispatch:
 
 permissions:
@@ -14,12 +17,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      - name: Compute report-day path
+        id: paths
+        run: |
+          DAY=$(TZ=Asia/Kolkata date -d 'yesterday' +%Y-%m-%d)
+          echo "day=$DAY" >> $GITHUB_OUTPUT
+
+      - name: Skip if today's report already posted
+        id: check
+        run: |
+          MARKER="reports/${{ steps.paths.outputs.day }}.posted"
+          if [ -f "$MARKER" ]; then
+            echo "Marker $MARKER exists -> skipping (already posted)"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "No marker for ${{ steps.paths.outputs.day }} -> proceeding"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install Chrome
+        if: steps.check.outputs.skip != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq google-chrome-stable || \
@@ -27,14 +51,8 @@ jobs:
              sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb)
           google-chrome --version
 
-      - name: Compute report-day path
-        id: paths
-        run: |
-          DAY=$(TZ=Asia/Kolkata date -d 'yesterday' +%Y-%m-%d)
-          echo "day=$DAY" >> $GITHUB_OUTPUT
-          echo "repo=${{ github.repository }}" >> $GITHUB_OUTPUT
-
-      - name: Render report image (without posting yet)
+      - name: Render report image
+        if: steps.check.outputs.skip != 'true'
         env:
           CHROME_PATH: /usr/bin/google-chrome
         run: |
@@ -51,7 +69,8 @@ jobs:
           screenshot(HTML_PATH, PNG_PATH)
           "
 
-      - name: Commit report.png to reports/<day>.png
+      - name: Commit PNG so raw URL is live
+        if: steps.check.outputs.skip != 'true'
         run: |
           mkdir -p reports
           cp report.png "reports/${{ steps.paths.outputs.day }}.png"
@@ -59,21 +78,35 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git add reports/
-          git commit -m "report: ${{ steps.paths.outputs.day }}" || echo "no changes"
+          git commit -m "report: ${{ steps.paths.outputs.day }} (image)" || echo "no changes"
+          git pull --rebase || true
           git push
 
-      - name: Post to Slack with image URL
+      - name: Post to Slack
+        if: steps.check.outputs.skip != 'true'
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_IDS: ${{ secrets.SLACK_CHANNEL_IDS }}
           HARMEET_USER_ID: ${{ secrets.HARMEET_USER_ID }}
           WHATSAPPER_USER_ID: ${{ secrets.WHATSAPPER_USER_ID }}
           CHROME_PATH: /usr/bin/google-chrome
-          IMAGE_URL: https://raw.githubusercontent.com/${{ steps.paths.outputs.repo }}/main/reports/${{ steps.paths.outputs.day }}.png
+          IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/reports/${{ steps.paths.outputs.day }}.png
         run: python report.py
 
+      - name: Commit posted marker (idempotency guard)
+        if: steps.check.outputs.skip != 'true' && success()
+        run: |
+          echo "Posted at $(date -u --iso-8601=seconds) by ${{ github.run_id }}" \
+            > "reports/${{ steps.paths.outputs.day }}.posted"
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add "reports/${{ steps.paths.outputs.day }}.posted"
+          git commit -m "report: ${{ steps.paths.outputs.day }} (posted marker)"
+          git pull --rebase || true
+          git push
+
       - name: Upload artifact
-        if: always()
+        if: always() && steps.check.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: report-png
