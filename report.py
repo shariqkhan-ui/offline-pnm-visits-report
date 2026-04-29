@@ -30,6 +30,7 @@ PNG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "report.png"
 EMAIL_TO_NAME = {
     "fahad.ahmad@wiom.in": "Fahad",
     "ajinkya.bhasagare@wiom.in": "Ajinkya",
+    "anurag.madhav@wiom.in": "Anurag",
 }
 DISPLAY_ORDER = ["Fahad", "Ajinkya", "Anurag", "Gaurav"]
 NORMAL_LED = {"all on", "only power led glowing"}
@@ -280,26 +281,30 @@ def post_message(token, channel_id, text, image_url=None):
     return r
 
 
-def post_with_blocks(token, channel_id, image_url, harmeet, whats):
+def post_with_blocks(token, channel_id, image_url, harmeet, whats, include_cc=True):
     cc_indent = " " * 80
-    payload = {
-        "channel": channel_id,
-        "text": "Daily PNM Visit Report",
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.',
-                },
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": '<!channel>- Please find the report of "Surprise physical visit at CSP" as of yesterday.',
             },
+        },
+    ]
+    if include_cc:
+        blocks.append(
             {
                 "type": "context",
                 "elements": [
                     {"type": "mrkdwn", "text": f"{cc_indent}cc <@{harmeet}> <@{whats}>"}
                 ],
-            },
-        ],
+            }
+        )
+    payload = {
+        "channel": channel_id,
+        "text": "Daily PNM Visit Report",
+        "blocks": blocks,
         "attachments": [
             {
                 "fallback": "Daily PNM Visit Report",
@@ -329,6 +334,7 @@ def main():
         sys.exit(1)
     harmeet = os.environ.get("HARMEET_USER_ID", "U077923R68H")
     whats = os.environ.get("WHATSAPPER_USER_ID", "U040Y7SEUSU")
+    include_cc = os.environ.get("INCLUDE_CC", "true").strip().lower() == "true"
     image_url = os.environ.get("IMAGE_URL", "")
     if not image_url:
         print("ERROR: IMAGE_URL env var required (URL of the report PNG)", file=sys.stderr)
@@ -343,8 +349,8 @@ def main():
     screenshot(HTML_PATH, PNG_PATH)
 
     for ch in channels:
-        post_with_blocks(token, ch, image_url, harmeet, whats)
-        print(f"Posted to {ch}")
+        post_with_blocks(token, ch, image_url, harmeet, whats, include_cc=include_cc)
+        print(f"Posted to {ch} (include_cc={include_cc})")
 
 
 if __name__ == "__main__":
