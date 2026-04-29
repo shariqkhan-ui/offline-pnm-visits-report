@@ -36,7 +36,10 @@ NORMAL_LED = {"all on", "only power led glowing"}
 UNKNOWN_BUG_NEEDLE = "internet led not glowing"
 
 
-def classify(led):
+def classify(led, ping):
+    # If device is currently pinging, the visit is attributed to CSP regardless of LED status.
+    if (ping or "").strip().lower() == "yes":
+        return "csp"
     s = led.strip().lower()
     if s in NORMAL_LED:
         return "normal"
@@ -73,7 +76,7 @@ def compute(today_ist):
             continue
         if d >= today_ist:
             continue
-        kind = classify(r.get("Device LED Status", ""))
+        kind = classify(r.get("Device LED Status", ""), r.get("Current Ping status", ""))
         daily[name][d]["v"] += 1
         ttd[name]["v"] += 1
         if kind == "csp":
