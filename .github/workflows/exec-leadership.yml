@@ -33,15 +33,25 @@ jobs:
 
       - name: Determine slot + paths
         id: paths
+        env:
+          TRIGGER_SCHEDULE: ${{ github.event.schedule }}
         run: |
-          # Marker uses POST DAY (today in IST, when cron fires); image filename uses
-          # POST DAY too since each post snapshots data through that moment.
+          # Map cron expression -> slot. This is bulletproof against GH Actions delays:
+          # the slot is determined by WHICH cron triggered, not by the wall clock.
+          # For workflow_dispatch (no schedule), fall back to wall-clock IST hour.
           DAY=$(TZ=Asia/Kolkata date +%Y-%m-%d)
-          HOUR=$(TZ=Asia/Kolkata date +%H)
-          if   [ "$HOUR" -lt 13 ]; then SLOT="10am"
-          elif [ "$HOUR" -lt 18 ]; then SLOT="3pm"
-          else                          SLOT="8pm"
-          fi
+          case "$TRIGGER_SCHEDULE" in
+            '30 4 * * *'|'0 5 * * *'|'30 5 * * *')   SLOT="10am" ;;
+            '30 9 * * *'|'0 10 * * *'|'30 10 * * *') SLOT="3pm"  ;;
+            '30 14 * * *'|'0 15 * * *'|'30 15 * * *') SLOT="8pm" ;;
+            *)
+              HOUR=$(TZ=Asia/Kolkata date +%H)
+              if   [ "$HOUR" -lt 13 ]; then SLOT="10am"
+              elif [ "$HOUR" -lt 18 ]; then SLOT="3pm"
+              else                          SLOT="8pm"
+              fi ;;
+          esac
+          echo "trigger=$TRIGGER_SCHEDULE -> slot=$SLOT (day=$DAY)"
           echo "day=$DAY"   >> $GITHUB_OUTPUT
           echo "slot=$SLOT" >> $GITHUB_OUTPUT
           echo "marker=reports/$DAY.posted-exec-$SLOT" >> $GITHUB_OUTPUT
