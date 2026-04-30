@@ -90,8 +90,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git add reports/
           git commit -m "report: ${{ steps.paths.outputs.day }} (exec ${{ steps.paths.outputs.slot }})" || echo "no changes"
-          git pull --rebase || true
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase || true
+            if git push; then echo "push ok on attempt $i"; break; fi
+            echo "push attempt $i lost the race; sleeping $((i * 5))s before retry"
+            sleep $((i * 5))
+            if [ "$i" = "5" ]; then echo "push failed after 5 attempts" >&2; exit 1; fi
+          done
 
       - name: Post to Execution Leadership channel (cc Harmeet only, today-anchored)
         if: steps.check.outputs.skip != 'true'
@@ -113,5 +118,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git add "${{ steps.paths.outputs.marker }}"
           git commit -m "report: ${{ steps.paths.outputs.day }} (marker, exec ${{ steps.paths.outputs.slot }})"
-          git pull --rebase || true
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase || true
+            if git push; then echo "push ok on attempt $i"; break; fi
+            echo "push attempt $i lost the race; sleeping $((i * 5))s before retry"
+            sleep $((i * 5))
+            if [ "$i" = "5" ]; then echo "push failed after 5 attempts" >&2; exit 1; fi
+          done
