@@ -48,6 +48,11 @@ def classify(led, ping):
         return "normal"
     if UNKNOWN_BUG_NEEDLE in s:
         return "unknown_bug"
+    # Default → CSP. Explicitly covers:
+    #   - "All off, No electrcity provided to Device"
+    #   - "PON not stable", "LOS led is glowing"
+    #   - "PNM Device not available at CSP" (added 2026-04-30)
+    #   - any other LED option that doesn't match the rules above
     return "csp"
 
 
