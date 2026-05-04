@@ -31,6 +31,7 @@ EMAIL_TO_NAME = {
     "fahad.ahmad@wiom.in": "Fahad",
     "ajinkya.bhasagare@wiom.in": "Ajinkya",
     "anurag.madhav@wiom.in": "Anurag",
+    "gaurav.sharma3@wiom.in": "Gaurav",
 }
 DISPLAY_ORDER = ["Fahad", "Ajinkya", "Anurag", "Gaurav"]
 NORMAL_LED = {"all on", "only power led glowing"}
